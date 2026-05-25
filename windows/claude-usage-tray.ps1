@@ -69,33 +69,32 @@ function Get-TokenUsage {
     $inTok  = 0
     $outTok = 0
 
-    if (-not (Test-Path $PROJECTS_DIR)) {
+    try {
+        $files = [System.IO.Directory]::GetFiles($PROJECTS_DIR, "*.jsonl",
+            [System.IO.SearchOption]::AllDirectories)
+    } catch {
         return [PSCustomObject]@{ Input = 0; Output = 0; Total = 0 }
     }
 
-    try {
-        Get-ChildItem -Path $PROJECTS_DIR -Recurse -Filter "*.jsonl" |
-            Where-Object { $_.LastWriteTime -gt $cutoff } |
-            ForEach-Object {
-                try {
-                    [System.IO.File]::ReadAllLines($_.FullName) | ForEach-Object {
-                        if ($_ -match '"output_tokens"' -and $_ -match '"timestamp"\s*:\s*"([^"]+)"') {
-                            try {
-                                $ts = [DateTime]::Parse($Matches[1]).ToLocalTime()
-                                if ($ts -gt $cutoff) {
-                                    $obj   = $_ | ConvertFrom-Json
-                                    $usage = if ($obj.message) { $obj.message.usage } else { $null }
-                                    if ($usage -and $usage.output_tokens) {
-                                        $inTok  += [int]$usage.input_tokens
-                                        $outTok += [int]$usage.output_tokens
-                                    }
-                                }
-                            } catch {}
+    foreach ($file in $files) {
+        try {
+            foreach ($line in [System.IO.File]::ReadAllLines($file)) {
+                if ($line -match '"output_tokens"' -and $line -match '"timestamp"\s*:\s*"([^"]+)"') {
+                    try {
+                        $ts = [DateTime]::Parse($Matches[1]).ToLocalTime()
+                        if ($ts -gt $cutoff) {
+                            $obj   = $line | ConvertFrom-Json
+                            $usage = if ($obj.message) { $obj.message.usage } else { $null }
+                            if ($usage -and $usage.output_tokens) {
+                                $inTok  += [int]$usage.input_tokens
+                                $outTok += [int]$usage.output_tokens
+                            }
                         }
-                    }
-                } catch {}
+                    } catch {}
+                }
             }
-    } catch {}
+        } catch {}
+    }
 
     return [PSCustomObject]@{
         Input  = $inTok

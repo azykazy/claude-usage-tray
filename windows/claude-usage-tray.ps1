@@ -79,18 +79,18 @@ function Get-TokenUsage {
             ForEach-Object {
                 try {
                     [System.IO.File]::ReadAllLines($_.FullName) | ForEach-Object {
-                        if ($_ -match '"output_tokens"' -and $_ -match '"timestamp"\s*:\s*(\d+)') {
-                            $ts = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Matches[1]).LocalDateTime
-                            if ($ts -gt $cutoff) {
-                                try {
+                        if ($_ -match '"output_tokens"' -and $_ -match '"timestamp"\s*:\s*"([^"]+)"') {
+                            try {
+                                $ts = [DateTime]::Parse($Matches[1]).ToLocalTime()
+                                if ($ts -gt $cutoff) {
                                     $obj   = $_ | ConvertFrom-Json
                                     $usage = if ($obj.message) { $obj.message.usage } else { $null }
                                     if ($usage -and $usage.output_tokens) {
                                         $inTok  += [int]$usage.input_tokens
                                         $outTok += [int]$usage.output_tokens
                                     }
-                                } catch {}
-                            }
+                                }
+                            } catch {}
                         }
                     }
                 } catch {}

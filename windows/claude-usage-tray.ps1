@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # ==================== Config ====================
-$MSG_LIMIT    = 75        # Pro plan approx limit (per 5-hour window) — adjust to match /usage
+$TOKEN_LIMIT  = 500000    # token limit per window — adjust by comparing with /usage
 $WINDOW_HOURS = 5
 $UPDATE_MS    = 60000     # refresh interval (ms) = 1 min
 
@@ -86,7 +86,9 @@ function Get-TokenUsage {
                             $obj   = $line | ConvertFrom-Json
                             $usage = if ($obj.message) { $obj.message.usage } else { $null }
                             if ($usage -and $usage.output_tokens) {
-                                $inTok  += [int]$usage.input_tokens
+                                $inTok  += [int]$usage.input_tokens +
+                                           [int]$usage.cache_creation_input_tokens +
+                                           [int]$usage.cache_read_input_tokens
                                 $outTok += [int]$usage.output_tokens
                             }
                         }
@@ -182,7 +184,10 @@ function Update-Display {
         return
     }
 
-    $script:prevIcon = New-TrayIcon $u.Percent $u.MinLeft
+    $t      = Get-TokenUsage
+    $tokPct = [math]::Min(100, [math]::Round($t.Total * 100.0 / $TOKEN_LIMIT))
+
+    $script:prevIcon = New-TrayIcon $tokPct $u.MinLeft
     $tray.Icon       = $script:prevIcon
 
     $resetTxt = if ($u.MinLeft -gt 0) {
@@ -193,12 +198,11 @@ function Update-Display {
         'Outside window'
     }
 
-    $tip       = "Claude $($u.Percent)% ($($u.Count)/$MSG_LIMIT) | $resetTxt"
+    $fmt = { param($n) if ($n -ge 1000) { "$([math]::Round($n/1000, 1))k" } else { "$n" } }
+    $tip       = "Claude $tokPct% ($(& $fmt $t.Total)tok) | $resetTxt"
     $tray.Text = if ($tip.Length -gt 63) { $tip.Substring(0, 63) } else { $tip }
 
-    $t = Get-TokenUsage
-    $fmt = { param($n) if ($n -ge 1000) { "$([math]::Round($n/1000, 1))k" } else { "$n" } }
-    $script:lastMsg = "Messages: $($u.Count) / $MSG_LIMIT ($($u.Percent)%)`nReset in: $($u.MinLeft) min`nWindow: past $WINDOW_HOURS hours`n`nTokens ($($WINDOW_HOURS)h):`n  In:    $(& $fmt $t.Input)`n  Out:   $(& $fmt $t.Output)`n  Total: $(& $fmt $t.Total)"
+    $script:lastMsg = "Tokens ($($WINDOW_HOURS)h): $tokPct% ($(& $fmt $t.Total) / $(& $fmt $TOKEN_LIMIT))`n  In:    $(& $fmt $t.Input)`n  Out:   $(& $fmt $t.Output)`nReset in: $($u.MinLeft) min`nSessions: $($u.Count)"
 }
 
 $tray.Add_Click({

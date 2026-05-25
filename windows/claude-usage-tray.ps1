@@ -25,6 +25,7 @@ try {
 # ================================================
 
 $HISTORY_FILE = "\\wsl.localhost\$WSL_DISTRO\home\$WSL_USER\.claude\history.jsonl"
+$PROJECTS_DIR = "\\wsl.localhost\$WSL_DISTRO\home\$WSL_USER\.claude\projects"
 
 function Get-Usage {
     $now    = Get-Date
@@ -59,6 +60,47 @@ function Get-Usage {
         Percent = $pct
         MinLeft = $minLeft
         Error   = $null
+    }
+}
+
+function Get-TokenUsage {
+    $now    = Get-Date
+    $cutoff = $now.AddHours(-$WINDOW_HOURS)
+    $inTok  = 0
+    $outTok = 0
+
+    if (-not (Test-Path $PROJECTS_DIR)) {
+        return [PSCustomObject]@{ Input = 0; Output = 0; Total = 0 }
+    }
+
+    try {
+        Get-ChildItem -Path $PROJECTS_DIR -Recurse -Filter "*.jsonl" |
+            Where-Object { $_.LastWriteTime -gt $cutoff } |
+            ForEach-Object {
+                try {
+                    [System.IO.File]::ReadAllLines($_.FullName) | ForEach-Object {
+                        if ($_ -match '"output_tokens"' -and $_ -match '"timestamp"\s*:\s*(\d+)') {
+                            $ts = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$Matches[1]).LocalDateTime
+                            if ($ts -gt $cutoff) {
+                                try {
+                                    $obj   = $_ | ConvertFrom-Json
+                                    $usage = if ($obj.message) { $obj.message.usage } else { $null }
+                                    if ($usage -and $usage.output_tokens) {
+                                        $inTok  += [int]$usage.input_tokens
+                                        $outTok += [int]$usage.output_tokens
+                                    }
+                                } catch {}
+                            }
+                        }
+                    }
+                } catch {}
+            }
+    } catch {}
+
+    return [PSCustomObject]@{
+        Input  = $inTok
+        Output = $outTok
+        Total  = $inTok + $outTok
     }
 }
 
@@ -155,7 +197,9 @@ function Update-Display {
     $tip       = "Claude $($u.Percent)% ($($u.Count)/$MSG_LIMIT) | $resetTxt"
     $tray.Text = if ($tip.Length -gt 63) { $tip.Substring(0, 63) } else { $tip }
 
-    $script:lastMsg = "Messages: $($u.Count) / $MSG_LIMIT ($($u.Percent)%)`nReset in: $($u.MinLeft) min`nWindow: past $WINDOW_HOURS hours"
+    $t = Get-TokenUsage
+    $fmt = { param($n) if ($n -ge 1000) { "$([math]::Round($n/1000, 1))k" } else { "$n" } }
+    $script:lastMsg = "Messages: $($u.Count) / $MSG_LIMIT ($($u.Percent)%)`nReset in: $($u.MinLeft) min`nWindow: past $WINDOW_HOURS hours`n`nTokens ($($WINDOW_HOURS)h):`n  In:    $(& $fmt $t.Input)`n  Out:   $(& $fmt $t.Output)`n  Total: $(& $fmt $t.Total)"
 }
 
 $tray.Add_Click({

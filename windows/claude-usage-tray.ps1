@@ -48,7 +48,6 @@ function Get-Usage {
     }
 
     $count   = $times.Count
-    $pct     = [math]::Min(100, [math]::Round($count * 100.0 / $MSG_LIMIT))
     $minLeft = 0
     if ($count -gt 0) {
         $oldest  = ($times | Sort-Object)[0]
@@ -57,7 +56,6 @@ function Get-Usage {
 
     return [PSCustomObject]@{
         Count   = $count
-        Percent = $pct
         MinLeft = $minLeft
         Error   = $null
     }

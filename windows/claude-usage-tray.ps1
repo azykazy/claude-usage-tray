@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # ==================== Config ====================
-$TOKEN_LIMIT  = 500000    # token limit per window — adjust by comparing with /usage
+$TOKEN_LIMIT  = 50000000  # token limit per window — adjust by comparing with /usage
 $WINDOW_HOURS = 5
 $UPDATE_MS    = 60000     # refresh interval (ms) = 1 min
 
@@ -197,8 +197,7 @@ function Update-Display {
     }
 
     $fmt = { param($n) if ($n -ge 1000) { "$([math]::Round($n/1000, 1))k" } else { "$n" } }
-    $tip       = "Claude $tokPct% ($(& $fmt $t.Total)tok) | $resetTxt"
-    $tray.Text = if ($tip.Length -gt 63) { $tip.Substring(0, 63) } else { $tip }
+    $tray.Text = "Claude $tokPct% ($(& $fmt $t.Total)tok)`n$resetTxt"
 
     $script:lastMsg = "Tokens ($($WINDOW_HOURS)h): $tokPct% ($(& $fmt $t.Total) / $(& $fmt $TOKEN_LIMIT))`n  In:    $(& $fmt $t.Input)`n  Out:   $(& $fmt $t.Output)`nReset in: $($u.MinLeft) min`nSessions: $($u.Count)"
 }
